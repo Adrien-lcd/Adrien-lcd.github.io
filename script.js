@@ -10,7 +10,7 @@
 
 // ----------------------------------------------------------------
 // URL DE L'API APPS SCRIPT INTÉGRÉE
-const GAS_URL = "https://script.google.com/macros/s/AKfycbx2Viy2RYNT2opecfKmiyt3eGzeA4TFgeJJDHcI9DBPJYSztdG5BSrPA4b-sfqXIZwMeg/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbwnFygonAP0yWaBAG72zl7dxJVBrDMU0-pty3MgmdbFoEJ3b6TwDMuaJHzcB-9dPBXBGg/exec";
 // ----------------------------------------------------------------
 
 
@@ -305,3 +305,4 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
 }); // Fin du 'DOMContentLoaded'
+
