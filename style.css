@@ -136,3 +136,43 @@ input[type="range"] {
 .toast.error {
     background-color: var(--color-red); /* Rouge erreur */
 }
+
+/* --- Styles pour la liste des disponibilités (Solution 2) --- */
+.availability-summary {
+    background: #f9f9f9;
+    border: 1px dashed #ccc;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.availability-summary h4 {
+    margin-top: 0;
+}
+
+.availability-summary ul {
+    list-style-type: none;
+    padding-left: 0;
+    margin: 0;
+}
+
+.availability-summary li {
+    padding: 6px 0;
+    border-bottom: 1px solid #eee;
+    font-size: 0.95em;
+}
+
+.availability-summary li:last-child {
+    border-bottom: none;
+}
+
+/* Style pour les jours fermés */
+.summary-closed {
+    color: #999;
+}
+
+/* Style pour les jours ouverts */
+.summary-open {
+    color: #27ae60; /* Un vert pour "ouvert" */
+    font-weight: bold;
+}
