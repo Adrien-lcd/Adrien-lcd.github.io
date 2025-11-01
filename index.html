@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>💈 Réservation Coiffeur</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <main class="container">
+        <div class="booking-card">
+            <h1>💈 Prise de Rendez-vous</h1>
+            
+            <div class="step">
+                <h2>Étape 1 : Choisir une date</h2>
+                <p>Sélectionnez une date pour voir les disponibilités.</p>
+                <input type="date" id="date-picker">
+                
+                <div id="availability-display">
+                    <p>En attente de sélection d'une date...</p>
+                </div>
+            </div>
+
+            <div class="step">
+                <h2>Étape 2 : Réserver</h2>
+                <form id="booking-form">
+                    
+                    <label for="time-input">Heure souhaitée :</label>
+                    <input type="time" id="time-input" required>
+
+                    <label for="duration-slider">Durée : <span id="duration-value">30</span> min</label>
+                    <input type="range" id="duration-slider" min="10" max="60" value="30" step="5">
+
+                    <label for="client-name">Votre nom :</label>
+                    <input type="text" id="client-name" placeholder="Ex: Adrien Le Coadou" required>
+                    
+                    <label for="client-email">Votre email (pour la confirmation) :</label>
+                    <input type="email" id="client-email" placeholder="Ex: email@example.com" required>
+
+                    <label for="client-message">Message (optionnel) :</label>
+                    <textarea id="client-message" placeholder="Type de coupe, couleur, etc..."></textarea>
+
+                    <button type="submit" id="submit-btn">Envoyer la demande</button>
+                </form>
+            </div>
+        </div>
+
+        <div id="toast-container"></div>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>
