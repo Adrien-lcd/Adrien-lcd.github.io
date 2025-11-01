@@ -4,8 +4,7 @@
  */
 
 // ----------------------------------------------------------------
-// ⚠️ MODIFIEZ CECI !
-// Collez l'URL de votre application web Apps Script ici
+// ⚠️ VÉRIFIEZ QUE C'EST VOTRE URL CORRIGÉE
 const GAS_URL = "https://script.google.com/macros/s/AKfycbx2Viy2RYNT2opecfKmiyt3eGzeA4TFgeJJDHcI9DBPJYSztdG5BSrPA4b-sfqXIZwMeg/exec";
 // ----------------------------------------------------------------
 
@@ -35,8 +34,11 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // --- Zone de notification ---
     const toastContainer = document.getElementById('toast-container');
-
     
+    // --- NOUVEL ÉLÉMENT (Solution 2) ---
+    const upcomingListDisplay = document.getElementById('upcoming-availability-list');
+
+
     // --- Écouteurs d'événements ---
 
     // 1. Mettre à jour la valeur du slider en temps réel
@@ -44,29 +46,31 @@ document.addEventListener('DOMContentLoaded', () => {
         durationValue.textContent = durationSlider.value;
     });
 
-    // 2. Charger les disponibilités quand la date change
+    // 2. MODIFIÉ : Quand la date change, on n'appelle plus fetch
     datePicker.addEventListener('change', handleDateChange);
 
-    // 3. Envoyer le formulaire
+    // 3. Envoyer le formulaire (inchangé)
     bookingForm.addEventListener('submit', handleFormSubmit);
+
+    // --- NOUVEAU : On charge tout au démarrage ---
+    loadInitialData();
 
 
     // --- Fonctions principales ---
 
     /**
-     * Appelé quand l'utilisateur change la date
+     * NOUVEAU (MODIFIÉ)
+     * Charge TOUTES les données 1 SEULE FOIS au chargement de la page.
      */
-    async function handleDateChange() {
-        const selectedDate = datePicker.value; // Format: "AAAA-MM-JJ"
-        if (!selectedDate) return;
-
-        availabilityDisplay.innerHTML = "<p>Chargement des disponibilités...</p>";
+    async function loadInitialData() {
+        upcomingListDisplay.innerHTML = "<p>Chargement des prochaines ouvertures...</p>";
+        availabilityDisplay.innerHTML = "<p>Veuillez sélectionner une date ci-dessus.</p>";
 
         try {
             // Appelle l'API (notre script doGet)
             const response = await fetch(GAS_URL);
             if (!response.ok) {
-                throw new Error("Erreur réseau lors de la récupération des données.");
+                throw new Error("Erreur réseau (code: " + response.status + ")");
             }
             const data = await response.json();
 
@@ -75,19 +79,84 @@ document.addEventListener('DOMContentLoaded', () => {
                 allAppointments = data.rdv;
                 allAvailabilities = data.disponibilites;
                 
-                // Affiche les infos pour la date choisie
-                renderAvailability(selectedDate);
+                // NOUVEAU : On appelle la fonction de la Solution 2
+                renderUpcomingList(14); // Affiche les 14 prochains jours
+                
+                // Si une date est déjà sélectionnée (ex: retour en arrière), on l'affiche
+                if(datePicker.value) {
+                     renderAvailability(datePicker.value);
+                }
+
             } else {
                 throw new Error(data.message);
             }
 
         } catch (error) {
-            console.error("Erreur (handleDateChange):", error);
-            availabilityDisplay.innerHTML = `<p style="color: red;">Impossible de charger les données: ${error.message}</p>`;
+            console.error("Erreur (loadInitialData):", error);
+            const errorMsg = `<p style="color: red;">Impossible de charger les données: ${error.message}. Vérifiez l'URL de l'API.</p>`;
+            upcomingListDisplay.innerHTML = errorMsg;
+            availabilityDisplay.innerHTML = "";
         }
     }
 
     /**
+     * NOUVEAU (Solution 2)
+     * Affiche la liste des X prochains jours dans la zone 'upcoming-availability-list'
+     */
+    function renderUpcomingList(daysToShow) {
+        let html = "<h4>Prochaines ouvertures :</h4><ul>";
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); // Normaliser à minuit
+
+        for (let i = 0; i < daysToShow; i++) {
+            const day = new Date(today);
+            day.setDate(today.getDate() + i);
+            
+            // Format "AAAA-MM-JJ"
+            const dateStr = day.toISOString().split('T')[0]; 
+            
+            // Formatage "Samedi 8 Nov"
+            const formattedDate = new Intl.DateTimeFormat('fr-FR', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'short'
+            }).format(day);
+
+            // Cherche la dispo pour ce jour dans les données déjà chargées
+            const availability = allAvailabilities.find(a => a.date === dateStr);
+            
+            if (availability && availability.openTime) {
+                // Jour ouvert
+                html += `<li><span class="summary-open">✅ ${formattedDate} : ${availability.openTime} - ${availability.closeTime}</span></li>`;
+            } else {
+                // Jour fermé
+                html += `<li><span class="summary-closed">❌ ${formattedDate} : Fermé</span></li>`;
+            }
+        }
+        html += "</ul>";
+        upcomingListDisplay.innerHTML = html;
+    }
+
+
+    /**
+     * MODIFIÉ
+     * Appelé quand l'utilisateur change la date.
+     * Ne fait plus de fetch, utilise les données globales.
+     */
+    function handleDateChange() {
+        const selectedDate = datePicker.value;
+        if (!selectedDate) {
+            availabilityDisplay.innerHTML = "<p>Veuillez sélectionner une date ci-dessus.</p>";
+            return;
+        }
+        
+        // On appelle directement la fonction d'affichage
+        renderAvailability(selectedDate);
+    }
+
+
+    /**
+     * INCHANGÉ (sauf un micro-texte)
      * Affiche les infos de disponibilité et les RDV pour la date choisie
      */
     function renderAvailability(selectedDate) {
@@ -100,7 +169,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let html = "";
 
         if (availability && availability.openTime) {
-            html += `<h3>Disponibilités le ${selectedDate}</h3>`;
+            html += `<h3>Détails pour le ${selectedDate}</h3>`;
             html += `<p>✅ Ouvert de <strong>${availability.openTime}</strong> à <strong>${availability.closeTime}</strong></p>`;
             
             if (appointmentsForDay.length > 0) {
@@ -110,16 +179,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 appointmentsForDay.sort((a, b) => a.time.localeCompare(b.time));
                 
                 appointmentsForDay.forEach(rdv => {
-                    // Calcule l'heure de fin
                     const [hours, minutes] = rdv.time.split(':').map(Number);
                     const endDate = new Date(2000, 0, 1, hours, minutes + rdv.duration);
                     const endTime = endDate.toTimeString().substring(0, 5);
 
-                    // Code couleur des statuts
-                    let statusClass = "status-pending"; // Jaune (CSS non défini, mais logique prête)
-                    if (rdv.status === "confirmed") {
-                        statusClass = "status-confirmed"; // Vert
-                    }
+                    let statusClass = rdv.status === "confirmed" ? "status-confirmed" : "status-pending";
 
                     html += `<li class="${statusClass}"><strong>${rdv.time}</strong> à <strong>${endTime}</strong> (${rdv.duration} min) - <em>Statut: ${rdv.status}</em></li>`;
                 });
@@ -129,7 +193,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
         } else {
-            html += `<h3>Disponibilités le ${selectedDate}</h3>`;
+            html += `<h3>Détails pour le ${selectedDate}</h3>`;
             html += "<p>❌ Le coiffeur n'est pas disponible ce jour-là.</p>";
         }
 
@@ -138,6 +202,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     /**
+     * INCHANGÉ
      * Appelé quand l'utilisateur soumet le formulaire
      */
     async function handleFormSubmit(event) {
@@ -159,7 +224,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // --- 3. Détection de chevauchement  ---
+        // --- 3. Détection de chevauchement ---
         if (checkConflict(newRdv, allAppointments)) {
             showToast("Conflit d'horaire ! L'heure que vous avez choisie est déjà prise.", "error");
             return;
@@ -172,7 +237,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const response = await fetch(GAS_URL, {
                 method: "POST",
-                mode: "cors", // Nécessaire pour les appels cross-domain
+                mode: "cors", 
                 headers: {
                     "Content-Type": "application/json",
                 },
@@ -183,11 +248,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (result.status === "success") {
                 showToast("Demande de RDV envoyée avec succès ! (Statut: En attente)", "success");
-                bookingForm.reset(); // Vide le formulaire
-                durationValue.textContent = "30"; // Réinitialise le slider
+                bookingForm.reset(); 
+                durationValue.textContent = "30"; 
                 
                 // Recharge les données pour afficher le nouveau RDV "pending"
-                await handleDateChange(); 
+                // On appelle loadInitialData() pour rafraîchir TOUTES les données
+                await loadInitialData(); 
             } else {
                 throw new Error(result.message);
             }
@@ -202,39 +268,35 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /**
+     * INCHANGÉ
      * Vérifie si le nouveau RDV entre en conflit avec des RDV existants
      */
     function checkConflict(newRdv, existingAppointments) {
-        // Convertit le nouveau RDV en objets Date
         const newStart = parseDateTime(newRdv.date, newRdv.time);
-        const newEnd = new Date(newStart.getTime() + newRdv.duration * 60000); // Ajoute la durée en millisecondes
+        const newEnd = new Date(newStart.getTime() + newRdv.duration * 60000); 
 
-        // Filtre les RDV du même jour
         const appointmentsForDay = existingAppointments.filter(
-            rdv => rdv.date === newRdv.date && rdv.status === "confirmed" // On ne vérifie que les RDV confirmés
+            rdv => rdv.date === newRdv.date && rdv.status === "confirmed" 
         );
 
         for (const rdv of appointmentsForDay) {
-            // Convertit le RDV existant en objets Date
             const existingStart = parseDateTime(rdv.date, rdv.time);
             const existingEnd = new Date(existingStart.getTime() + rdv.duration * 60000);
 
-            // Logique de conflit :
-            // (Le nouveau RDV commence AVANT la fin de l'existant) ET (Le nouveau RDV se termine APRES le début de l'existant)
             const isOverlap = newStart < existingEnd && newEnd > existingStart;
             
             if (isOverlap) {
-                return true; // Conflit trouvé !
+                return true; 
             }
         }
-        return false; // Pas de conflit
+        return false; 
     }
 
 
-    // --- Fonctions utilitaires ---
+    // --- Fonctions utilitaires (INCHANGÉES) ---
 
     /**
-     * Affiche une notification "toast" 
+     * Affiche une notification "toast"
      */
     function showToast(message, type = "success") {
         const toast = document.createElement('div');
@@ -243,10 +305,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         toastContainer.appendChild(toast);
 
-        // Animation d'apparition (CSS requis)
         setTimeout(() => toast.classList.add('show'), 100);
 
-        // Disparition après 3 secondes
         setTimeout(() => {
             toast.classList.remove('show');
             setTimeout(() => toast.remove(), 500);
@@ -259,8 +319,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function parseDateTime(dateStr, timeStr) {
         const [year, month, day] = dateStr.split('-');
         const [hours, minutes] = timeStr.split(':');
-        // Mois est 0-indexé en JS (0=Janvier, 11=Décembre)
         return new Date(year, month - 1, day, hours, minutes);
     }
-
 });
