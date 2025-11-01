@@ -14,13 +14,18 @@
             
             <div class="step">
                 <h2>Étape 1 : Choisir une date</h2>
-                <p>Sélectionnez une date pour voir les disponibilités.</p>
+                <p>Consultez les jours d'ouverture ci-dessous, puis sélectionnez une date pour voir les détails et les RDV déjà pris.</p>
+            
+                <div class="availability-summary" id="upcoming-availability-list">
+                    <p>Chargement des prochaines ouvertures...</p>
+                </div>
+                
+                <label for="date-picker"><strong>Date choisie :</strong></label>
                 <input type="date" id="date-picker">
                 
-                <div id="availability-display">
-                    <p>En attente de sélection d'une date...</p>
-                </div>
-            </div>
+                 <div id="availability-display">
+                    </div>
+        </div>
 
             <div class="step">
                 <h2>Étape 2 : Réserver</h2>
@@ -51,4 +56,5 @@
 
     <script src="script.js"></script>
 </body>
+
 </html>
