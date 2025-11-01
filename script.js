@@ -1,9 +1,11 @@
 /*
- * SCRIPT CLIENT (FRONTEND)
+ * SCRIPT CLIENT (FRONTEND) - VERSION COMPLÈTE ET CORRIGÉE
  * Gère l'interaction avec la page HTML et l'API Google Sheets
- * * VERSION CORRIGÉE :
+ *
+ * CORRECTIONS INCLUSES :
  * 1. [BUG FIX] Utilise .startsWith() pour la comparaison des dates (formatage Google Sheet vs JS)
  * 2. [AMÉLIORATION] N'affiche plus les jours "Fermé" dans la liste des prochaines ouvertures.
+ * 3. [INTÉGRATION] URL de l'API Apps Script incluse.
  */
 
 // ----------------------------------------------------------------
@@ -18,6 +20,7 @@ let allAvailabilities = [];
 
 
 // --- Sélection des éléments HTML (DOM) ---
+// On attend que le HTML soit chargé
 document.addEventListener('DOMContentLoaded', () => {
     
     // --- Éléments principaux ---
@@ -37,17 +40,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Zone de notification ---
     const toastContainer = document.getElementById('toast-container');
     
-    // --- NOUVEL ÉLÉMENT (Solution 2) ---
+    // --- ÉLÉMENT (Solution 2) ---
     const upcomingListDisplay = document.getElementById('upcoming-availability-list');
 
 
     // --- Écouteurs d'événements ---
 
+    // 1. Mettre à jour la valeur du slider en temps réel
     durationSlider.addEventListener('input', () => {
         durationValue.textContent = durationSlider.value;
     });
 
-    datePicker.addEventListener('change', handleDateChange);
+    // 2. Charger les disponibilités quand la date change
+    datePicker.addEventListener('change', handleDateChange); // C'est ici que l'erreur se produisait
+
+    // 3. Envoyer le formulaire
     bookingForm.addEventListener('submit', handleFormSubmit);
 
     // --- On charge tout au démarrage ---
@@ -135,6 +142,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     /**
+     * !! VÉRIFIEZ QUE CETTE FONCTION EST BIEN PRÉSENTE !!
+     * Appelé quand l'utilisateur change la date.
+     * Ne fait plus de fetch, utilise les données globales.
+     */
+    function handleDateChange() {
+        const selectedDate = datePicker.value;
+        if (!selectedDate) {
+            availabilityDisplay.innerHTML = "<p>Veuillez sélectionner une date ci-dessus.</p>";
+            return;
+        }
+        
+        // On appelle directement la fonction d'affichage
+        renderAvailability(selectedDate);
+    }
+
+
+    /**
      * Affiche les infos de disponibilité et les RDV pour la date choisie
      */
     function renderAvailability(selectedDate) {
@@ -189,7 +213,7 @@ document.addEventListener('DOMContentLoaded', () => {
             time: timeInput.value,
             duration: parseInt(durationSlider.value, 10),
             client_name: clientName.value,
-            client_email: clientName.value, // Corrigé (utilisait clientName)
+            client_email: clientEmail.value, // Corrigé (utilisait clientName par erreur dans une version précédente)
             message: clientMessage.value
         };
 
@@ -198,7 +222,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // [BUG FIX] Utilise les données déjà chargées et la fonction de comparaison corrigée
         if (checkConflict(newRdv, allAppointments)) {
             showToast("Conflit d'horaire ! L'heure que vous avez choisie est déjà prise.", "error");
             return;
@@ -221,8 +244,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 bookingForm.reset(); 
                 durationValue.textContent = "30"; 
                 
-                // Recharge les données pour afficher le nouveau RDV "pending"
-                await loadInitialData(); 
+                await loadInitialData(); // Recharge les données
             } else {
                 throw new Error(result.message);
             }
@@ -243,7 +265,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const newStart = parseDateTime(newRdv.date, newRdv.time);
         const newEnd = new Date(newStart.getTime() + newRdv.duration * 60000); 
 
-        // [BUG FIX] Utilise .startsWith() pour filtrer les RDV du jour
         const appointmentsForDay = existingAppointments.filter(
             rdv => rdv.date.startsWith(newRdv.date) && rdv.status === "confirmed" 
         );
@@ -262,11 +283,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-    // --- Fonctions utilitaires (INCHANGÉES) ---
+    // --- Fonctions utilitaires ---
 
     function showToast(message, type = "success") {
         const toast = document.createElement('div');
-        toast.className = `toast ${type === 'error' ? 'error' : 'success'}`; // J'ai corrigé un bug ici (error affichait success)
+        toast.className = `toast ${type === 'error' ? 'error' : 'success'}`;
         toast.textContent = message;
         toastContainer.appendChild(toast);
         setTimeout(() => toast.classList.add('show'), 100);
@@ -277,10 +298,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function parseDateTime(dateStr, timeStr) {
-        // [BUG FIX] S'assure de ne prendre que la partie date si le format long est passé
         const cleanDateStr = dateStr.split('T')[0];
         const [year, month, day] = cleanDateStr.split('-');
         const [hours, minutes] = timeStr.split(':');
         return new Date(year, month - 1, day, hours, minutes);
     }
-});
+    
+}); // Fin du 'DOMContentLoaded'
