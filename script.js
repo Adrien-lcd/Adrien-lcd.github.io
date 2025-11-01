@@ -6,7 +6,7 @@
 // ----------------------------------------------------------------
 // ⚠️ MODIFIEZ CECI !
 // Collez l'URL de votre application web Apps Script ici
-const GAS_URL = "https://adrien-lcd.github.io/";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbx2Viy2RYNT2opecfKmiyt3eGzeA4TFgeJJDHcI9DBPJYSztdG5BSrPA4b-sfqXIZwMeg/exec";
 // ----------------------------------------------------------------
 
 
@@ -262,4 +262,5 @@ document.addEventListener('DOMContentLoaded', () => {
         // Mois est 0-indexé en JS (0=Janvier, 11=Décembre)
         return new Date(year, month - 1, day, hours, minutes);
     }
+
 });
