@@ -14,28 +14,27 @@
             
             <div class="step">
                 <h2>Étape 1 : Choisir une date</h2>
-                <p>Consultez les jours d'ouverture ci-dessous, puis sélectionnez une date pour voir les détails et les RDV déjà pris.</p>
-            
-                <div class="availability-summary" id="upcoming-availability-list">
-                    <p>Chargement des prochaines ouvertures...</p>
-                </div>
+                <p>Sélectionnez une date parmi les prochaines ouvertures :</p>
+
+                <label for="date-select"><strong>Date disponible :</strong></label>
+                <select id="date-select" class="styled-select">
+                    <option value="">Chargement...</option>
+                </select>
                 
-                <label for="date-picker"><strong>Date choisie :</strong></label>
-                <input type="date" id="date-picker">
-                
-                 <div id="availability-display">
-                    </div>
-        </div>
+                <div id="availability-display"></div>
+            </div>
 
             <div class="step">
                 <h2>Étape 2 : Réserver</h2>
                 <form id="booking-form">
                     
-                    <label for="time-input">Heure souhaitée :</label>
-                    <input type="time" id="time-input" required>
-
                     <label for="duration-slider">Durée : <span id="duration-value">30</span> min</label>
-                    <input type="range" id="duration-slider" min="10" max="60" value="30" step="5">
+                    <input type="range" id="duration-slider" min="15" max="60" value="30" step="15">
+
+                    <label for="time-select">Créneaux disponibles :</label>
+                    <select id="time-select" class="styled-select" required>
+                        <option value="">-- Veuillez d'abord choisir une date --</option>
+                    </select>
 
                     <label for="client-name">Votre nom :</label>
                     <input type="text" id="client-name" placeholder="Ex: Adrien Le Coadou" required>
@@ -44,7 +43,7 @@
                     <input type="email" id="client-email" placeholder="Ex: email@example.com" required>
 
                     <label for="client-message">Message (optionnel) :</label>
-                    <textarea id="client-message" placeholder="Type de coupe, couleur, etc..."></textarea>
+                    <textarea id="client-message" placeholder="Type de coupe, détails..."></textarea>
 
                     <button type="submit" id="submit-btn">Envoyer la demande</button>
                 </form>
@@ -56,5 +55,4 @@
 
     <script src="script.js"></script>
 </body>
-
 </html>
