@@ -112,7 +112,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const day = new Date(today);
             day.setDate(today.getDate() + i);
             
-            const dateStr = day.toISOString().split('T')[0]; // Format "AAAA-MM-JJ"
+            const dateStr = day.toLocaleDateString('fr-CA'); // Format "AAAA-MM-JJ"
             
             const formattedDate = new Intl.DateTimeFormat('fr-FR', {
                 weekday: 'long',
@@ -305,6 +305,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
 }); // Fin du 'DOMContentLoaded'
+
 
 
 
