@@ -1,9 +1,8 @@
 /*
- * SCRIPT CLIENT - VERSION FINALE (ROBUSTE)
- * * CORRECTIONS MAJEURES :
- * 1. [FORMAT DATE] Gère automatiquement les dates "JJ/MM/AAAA" (Sheet) vs "AAAA-MM-JJ" (Site).
- * 2. [COLONNES] Tolère les majuscules/minuscules dans les en-têtes (Date vs date).
- * 3. [STATUT] Reconnaît "Confirmed", "Validé", "confirmé" comme valides.
+ * SCRIPT CLIENT - VERSION CORRIGÉE (PADDING DES ZÉROS)
+ * CORRECTION CRITIQUE :
+ * -> Gère les dates courtes (ex: 5/1/2025) en ajoutant les zéros (2025-01-05).
+ * -> C'est ce qui bloquait l'affichage avec les vraies dates Excel/Sheets.
  */
 
 const GAS_URL = "https://script.google.com/macros/s/AKfycbxuHIOaJrAwoqyxixiONlDa3Xya7E7FwOJWe-MQiI9Z6XNiUWk4_XX10FYTF2bMcKI2vA/exec";
@@ -29,7 +28,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const toastContainer = document.getElementById('toast-container');
 
     // --- Listeners ---
-
     durationSlider.addEventListener('input', () => {
         durationValue.textContent = durationSlider.value;
         if (dateSelect.value) updateTimeSlots(dateSelect.value);
@@ -60,11 +58,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
 
             if (data.status === "success") {
-                // 1. On uniformise les noms de colonnes (minuscules)
+                // 1. Normalisation des clés (minuscules)
                 let rawRdv = normalizeKeys(data.rdv);
                 let rawAvail = normalizeKeys(data.disponibilites);
 
-                // 2. On uniformise les VALEURS de dates (JJ/MM/AAAA -> AAAA-MM-JJ)
+                // 2. Normalisation des DATES (Ajout des zéros manquants)
                 allAppointments = rawRdv.map(item => ({
                     ...item,
                     date: normalizeDateValue(item.date)
@@ -75,9 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     date: normalizeDateValue(item.date)
                 }));
                 
-                console.log("Données RDV chargées :", allAppointments);
-                console.log("Données Dispo chargées :", allAvailabilities);
-
+                console.log("Disponibilités reçues (corrigées) :", allAvailabilities); 
                 populateDateSelect();
             } else {
                 throw new Error(data.message);
@@ -90,38 +86,48 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /*
-     * Convertit une date "JJ/MM/AAAA" (Excel/Sheet FR) en "AAAA-MM-JJ" (JS Standard)
-     * Si la date est déjà "AAAA-MM-JJ", on la garde telle quelle.
+     * [CORRECTION] Fonction qui force le format AAAA-MM-JJ avec des zéros (05, not 5)
      */
     function normalizeDateValue(dateStr) {
         if (!dateStr) return "";
         
-        // Si c'est déjà au format AAAA-MM-JJ (ex: 2025-11-03)
-        if (dateStr.match(/^\d{4}-\d{2}-\d{2}/)) {
-            return dateStr.substring(0, 10);
+        // Nettoyage des espaces éventuels
+        dateStr = dateStr.trim();
+
+        // Cas 1 : Format déjà ISO (2025-11-05 ou 2025-11-5)
+        if (dateStr.includes('-')) {
+            const parts = dateStr.split('-');
+            if (parts.length === 3) {
+                const y = parts[0];
+                const m = parts[1].padStart(2, '0'); // Ajoute un 0 si besoin
+                const d = parts[2].split('T')[0].padStart(2, '0'); // Gère aussi le "T" du timestamp
+                return `${y}-${m}-${d}`;
+            }
         }
         
-        // Si c'est au format JJ/MM/AAAA (ex: 03/11/2025)
+        // Cas 2 : Format Français (5/11/2025 ou 05/11/2025)
         if (dateStr.includes('/')) {
             const parts = dateStr.split('/');
             if (parts.length === 3) {
-                // On inverse : Jour/Mois/Année -> Année-Mois-Jour
-                return `${parts[2]}-${parts[1]}-${parts[0]}`;
+                const d = parts[0].padStart(2, '0'); // ex: "5" devient "05"
+                const m = parts[1].padStart(2, '0'); // ex: "3" devient "03"
+                const y = parts[2];
+                // On retourne Année-Mois-Jour
+                return `${y}-${m}-${d}`;
             }
         }
+        
+        // Cas de secours : on retourne tel quel
         return dateStr;
     }
 
-    /*
-     * Met toutes les clés (colonnes) en minuscules pour éviter les erreurs "Date" vs "date"
-     */
     function normalizeKeys(list) {
         if (!list) return [];
         return list.map(item => {
             const newItem = {};
             for (const key in item) {
                 let newKey = key.toLowerCase().trim();
-                // Mapping de sécurité
+                // Mapping manuel
                 if (newKey.includes('date')) newKey = 'date';
                 if (newKey.includes('time') || newKey.includes('heure')) newKey = 'time';
                 if (newKey.includes('duration') || newKey.includes('durée')) newKey = 'duration';
@@ -142,14 +148,14 @@ document.addEventListener('DOMContentLoaded', () => {
         today.setHours(0,0,0,0);
         let count = 0;
 
-        for (let i = 0; i < 60; i++) { // On regarde sur 60 jours
+        for (let i = 0; i < 60; i++) { 
             const day = new Date(today);
             day.setDate(today.getDate() + i);
-            const dateKey = day.toLocaleDateString('fr-CA'); // AAAA-MM-JJ
+            const dateKey = day.toLocaleDateString('fr-CA'); // Produit toujours "2025-01-05" (avec zéros)
             
             const label = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }).format(day);
 
-            // Recherche exacte maintenant que tout est normalisé
+            // Recherche exacte (maintenant que tout est normalisé avec zéros)
             const isOpen = allAvailabilities.find(a => a.date === dateKey && a.opentime);
 
             if (isOpen) {
@@ -170,7 +176,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderDayDetails(dateKey) {
         const availability = allAvailabilities.find(a => a.date === dateKey);
-        
         // Filtre les RDV pour ce jour
         const dayRdvs = allAppointments.filter(rdv => rdv.date === dateKey);
 
@@ -190,9 +195,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const endDate = new Date(0,0,0, h, m + parseInt(rdv.duration || 30));
                 const endStr = endDate.toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'});
 
-                // Gestion souple du statut
                 const status = (rdv.status || "").toLowerCase();
-                // On considère occupé si c'est confirmé OU validé
                 const isConfirmed = status.includes('confirm') || status.includes('valid');
                 
                 const icon = isConfirmed ? '❌ Occupé' : '⏳ En attente';
