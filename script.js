@@ -1,8 +1,9 @@
 /*
- * SCRIPT CLIENT - VERSION LISTES INTELLIGENTES
- * 1. Affiche les RDV existants avec Nom + Durée.
- * 2. Date : Liste déroulante des jours ouverts uniquement.
- * 3. Heure : Liste déroulante calculée (Horaires - RDV existants).
+ * SCRIPT CLIENT - CORRIGÉ (Affichage des RDV Validés)
+ * * CORRECTIONS :
+ * 1. [CRITIQUE] Remplacement de "===" par ".startsWith()" pour trouver les RDV.
+ * 2. [AFFICHAGE] Affiche bien l'heure, la durée et le nom pour les RDV existants.
+ * 3. [SELECTION] Retire les créneaux indisponibles de la liste déroulante.
  */
 
 const GAS_URL = "https://script.google.com/macros/s/AKfycbxuHIOaJrAwoqyxixiONlDa3Xya7E7FwOJWe-MQiI9Z6XNiUWk4_XX10FYTF2bMcKI2vA/exec";
@@ -94,14 +95,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const day = new Date(today);
             day.setDate(today.getDate() + i);
             
-            // Format technique pour la comparaison (YYYY-MM-DD)
+            // Format technique (YYYY-MM-DD)
             const dateKey = day.toLocaleDateString('fr-CA'); 
             
             // Format joli pour l'utilisateur
             const label = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }).format(day);
 
-            // Est-ce ouvert ce jour-là ?
-            const isOpen = allAvailabilities.find(a => a.date === dateKey && a.openTime);
+            // Est-ce ouvert ce jour-là ? Utilise startsWith pour être sûr
+            const isOpen = allAvailabilities.find(a => a.date.startsWith(dateKey) && a.openTime);
 
             if (isOpen) {
                 const option = document.createElement('option');
@@ -120,19 +121,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /**
-     * Affiche les RDV déjà pris (BUG FIX: Affiche Nom + Heure)
+     * Affiche les RDV déjà pris (BUG FIX: Utilise startsWith)
      */
     function renderDayDetails(dateKey) {
-        const availability = allAvailabilities.find(a => a.date === dateKey);
+        // Trouve les horaires d'ouverture
+        const availability = allAvailabilities.find(a => a.date.startsWith(dateKey));
         
-        // On filtre TOUS les RDV de ce jour (confirmés ou pending)
-        const dayRdvs = allAppointments.filter(rdv => rdv.date === dateKey);
+        // Trouve TOUS les RDV de ce jour (confirmés ou pending)
+        // [CORRECTION IMPORTANTE] Utilisation de startsWith
+        const dayRdvs = allAppointments.filter(rdv => rdv.date && rdv.date.startsWith(dateKey));
 
         let html = `<div style="background: white; padding: 15px; border-radius: 8px; margin-top: 10px; border: 1px solid #ddd;">`;
         html += `<p><strong>Horaires d'ouverture :</strong> ${availability.openTime} - ${availability.closeTime}</p>`;
 
         if (dayRdvs.length > 0) {
-            html += `<h5>⚠️ Rendez-vous déjà planifiés :</h5><ul style="padding-left: 20px;">`;
+            html += `<h5>⚠️ Créneaux déjà réservés :</h5><ul style="padding-left: 20px;">`;
             
             // Tri par heure
             dayRdvs.sort((a, b) => a.time.localeCompare(b.time));
@@ -143,13 +146,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const endDate = new Date(0,0,0, h, m + parseInt(rdv.duration));
                 const endStr = endDate.toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'});
 
-                // BUG FIX : On affiche le NOM du client
-                // On met une icône différente si confirmé ou en attente
-                const icon = rdv.status === 'confirmed' ? '❌ Occupé' : '⏳ En attente';
+                // Icône selon statut
+                const icon = rdv.status === 'confirmed' ? '❌' : '⏳';
+                const statusText = rdv.status === 'confirmed' ? 'Confirmé' : 'En attente';
                 
+                // Affichage: Heure, Durée, Nom
                 html += `<li>
-                    <strong>${rdv.time} - ${endStr}</strong> : ${icon} 
-                    <br><span style="font-size: 0.9em; color: #666;">Client : ${rdv.client_name} (${rdv.duration} min)</span>
+                    <strong>${rdv.time} - ${endStr}</strong> (${rdv.duration} min) : ${icon} 
+                    <br><span style="font-size: 0.9em; color: #555;">Client : ${rdv.client_name}</span>
                 </li>`;
             });
             html += `</ul>`;
@@ -163,22 +167,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     /**
-     * GÉNIE LOGIQUE : Calcule les créneaux disponibles
-     * Algorithme :
-     * 1. On part de l'heure d'ouverture.
-     * 2. On avance par pas de 15 min.
-     * 3. Pour chaque pas, on regarde si [Heure -> Heure+Durée] touche un RDV confirmé.
-     * 4. Si ça touche pas, on ajoute à la liste.
+     * Calcule les créneaux disponibles en excluant les conflits
      */
     function updateTimeSlots(dateKey) {
         timeSelect.innerHTML = "";
         
-        const availability = allAvailabilities.find(a => a.date === dateKey);
+        const availability = allAvailabilities.find(a => a.date.startsWith(dateKey));
         if (!availability) return;
 
-        // Récupération des RDV confirmés qui bloquent
+        // Récupération des RDV confirmés qui bloquent (avec startsWith)
         const blockers = allAppointments.filter(
-            rdv => rdv.date === dateKey && rdv.status === 'confirmed'
+            rdv => rdv.date && rdv.date.startsWith(dateKey) && rdv.status === 'confirmed'
         );
 
         const openMinutes = timeToMinutes(availability.openTime);
@@ -203,14 +202,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 // (Start1 < End2) && (End1 > Start2)
                 if (slotStart < rdvEnd && slotEnd > rdvStart) {
                     isFree = false;
-                    break; // Pas la peine de vérifier les autres RDV
+                    break; // Conflit trouvé
                 }
             }
 
             if (isFree) {
                 const option = document.createElement('option');
                 option.value = minutesToTime(slotStart);
-                option.textContent = `${minutesToTime(slotStart)} (${duration} min)`;
+                option.textContent = `${minutesToTime(slotStart)}`;
                 timeSelect.appendChild(option);
                 count++;
             }
@@ -218,7 +217,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (count === 0) {
             const option = document.createElement('option');
-            option.textContent = "Aucun créneau disponible pour cette durée";
+            option.textContent = "Complet pour cette durée";
             timeSelect.appendChild(option);
         }
     }
@@ -231,7 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const selectedDate = dateSelect.value;
         const selectedTime = timeSelect.value;
 
-        if (!selectedDate || !selectedTime || selectedTime.includes("Aucun")) {
+        if (!selectedDate || !selectedTime || selectedTime.includes("Complet") || selectedTime.includes("Choisissez")) {
             showToast("Veuillez sélectionner une date et un créneau valide.", "error");
             return;
         }
@@ -259,9 +258,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const result = await response.json();
 
             if (result.status === "success") {
-                showToast("RDV confirmé ! En attente de validation.", "success");
+                showToast("RDV envoyé ! En attente de validation.", "success");
                 bookingForm.reset();
-                // On recharge pour mettre à jour les listes
                 setTimeout(() => loadInitialData(), 1000);
             } else {
                 throw new Error(result.message);
