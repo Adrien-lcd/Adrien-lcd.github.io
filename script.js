@@ -1,15 +1,16 @@
 /*
- * SCRIPT CLIENT (FRONTEND) - VERSION COMPLÈTE ET CORRIGÉE
+ * SCRIPT CLIENT (FRONTEND) - VERSION FINALE (VALIDÉE)
  * Gère l'interaction avec la page HTML et l'API Google Sheets
  *
  * CORRECTIONS INCLUSES :
- * 1. [BUG FIX] Utilise .startsWith() pour la comparaison des dates (formatage Google Sheet vs JS)
- * 2. [AMÉLIORATION] N'affiche plus les jours "Fermé" dans la liste des prochaines ouvertures.
- * 3. [INTÉGRATION] URL de l'API Apps Script incluse.
+ * 1. [DATE] Utilise .toLocaleDateString('fr-CA') pour éviter le bug de fuseau horaire.
+ * 2. [CORS] Envoie les données en text/plain pour éviter l'erreur "Failed to fetch".
+ * 3. [UX] Bloque visuellement les heures hors créneaux (min/max).
+ * 4. [SECURITÉ] Empêche la soumission si l'heure dépasse la fermeture.
  */
 
 // ----------------------------------------------------------------
-// URL DE L'API APPS SCRIPT INTÉGRÉE
+// URL DE L'API APPS SCRIPT
 const GAS_URL = "https://script.google.com/macros/s/AKfycbxuHIOaJrAwoqyxixiONlDa3Xya7E7FwOJWe-MQiI9Z6XNiUWk4_XX10FYTF2bMcKI2vA/exec";
 // ----------------------------------------------------------------
 
@@ -20,7 +21,6 @@ let allAvailabilities = [];
 
 
 // --- Sélection des éléments HTML (DOM) ---
-// On attend que le HTML soit chargé
 document.addEventListener('DOMContentLoaded', () => {
     
     // --- Éléments principaux ---
@@ -40,31 +40,31 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Zone de notification ---
     const toastContainer = document.getElementById('toast-container');
     
-    // --- ÉLÉMENT (Solution 2) ---
+    // --- Liste des prochaines ouvertures ---
     const upcomingListDisplay = document.getElementById('upcoming-availability-list');
 
 
     // --- Écouteurs d'événements ---
 
-    // 1. Mettre à jour la valeur du slider en temps réel
+    // 1. Slider durée
     durationSlider.addEventListener('input', () => {
         durationValue.textContent = durationSlider.value;
     });
 
-    // 2. Charger les disponibilités quand la date change
-    datePicker.addEventListener('change', handleDateChange); // C'est ici que l'erreur se produisait
+    // 2. Changement de date
+    datePicker.addEventListener('change', handleDateChange);
 
-    // 3. Envoyer le formulaire
+    // 3. Soumission du formulaire
     bookingForm.addEventListener('submit', handleFormSubmit);
 
-    // --- On charge tout au démarrage ---
+    // --- Chargement initial ---
     loadInitialData();
 
 
     // --- Fonctions principales ---
 
     /**
-     * Charge TOUTES les données 1 SEULE FOIS au chargement de la page.
+     * Charge les données depuis Google Sheets
      */
     async function loadInitialData() {
         upcomingListDisplay.innerHTML = "<p>Chargement des prochaines ouvertures...</p>";
@@ -81,7 +81,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 allAppointments = data.rdv;
                 allAvailabilities = data.disponibilites;
                 
-                renderUpcomingList(14); // Affiche les 14 prochains jours
+                renderUpcomingList(14); 
                 
                 if(datePicker.value) {
                      renderAvailability(datePicker.value);
@@ -93,18 +93,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (error) {
             console.error("Erreur (loadInitialData):", error);
-            const errorMsg = `<p style="color: red;">Impossible de charger les données: ${error.message}. Vérifiez l'URL de l'API et le format des onglets du Sheet.</p>`;
+            const errorMsg = `<p style="color: red;">Impossible de charger les données: ${error.message}. Vérifiez l'URL de l'API.</p>`;
             upcomingListDisplay.innerHTML = errorMsg;
             availabilityDisplay.innerHTML = "";
         }
     }
 
     /**
-     * AMÉLIORATION : N'affiche que les jours ouverts
+     * Affiche la liste des prochains jours ouverts
      */
     function renderUpcomingList(daysToShow) {
         let html = "<h4>Prochaines ouvertures :</h4><ul>";
-        let openDaysFound = 0; // Compteur pour savoir si on trouve des jours ouverts
+        let openDaysFound = 0; 
         const today = new Date();
         today.setHours(0, 0, 0, 0); 
 
@@ -112,7 +112,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const day = new Date(today);
             day.setDate(today.getDate() + i);
             
-            const dateStr = day.toLocaleDateString('fr-CA'); // Format "AAAA-MM-JJ"
+            // [FIX TIMEZONE] Formatage robuste "AAAA-MM-JJ" en heure locale
+            const dateStr = day.toLocaleDateString('fr-CA'); 
             
             const formattedDate = new Intl.DateTimeFormat('fr-FR', {
                 weekday: 'long',
@@ -120,18 +121,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 month: 'short'
             }).format(day);
 
-            // [BUG FIX] Utilise .startsWith() au lieu de ===
             const availability = allAvailabilities.find(a => a.date.startsWith(dateStr));
             
-            // [AMÉLIORATION] N'affiche la ligne que si le jour est ouvert
             if (availability && availability.openTime) {
                 html += `<li><span class="summary-open">✅ ${formattedDate} : ${availability.openTime} - ${availability.closeTime}</span></li>`;
                 openDaysFound++;
             }
-            // (On ne fait rien si c'est fermé)
         }
         
-        // Si aucun jour n'est ouvert, on affiche un message
         if (openDaysFound === 0) {
             html += "<li>Aucune date d'ouverture n'est prévue pour le moment.</li>";
         }
@@ -142,9 +139,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     /**
-     * !! VÉRIFIEZ QUE CETTE FONCTION EST BIEN PRÉSENTE !!
-     * Appelé quand l'utilisateur change la date.
-     * Ne fait plus de fetch, utilise les données globales.
+     * Gère le changement de date dans le sélecteur
      */
     function handleDateChange() {
         const selectedDate = datePicker.value;
@@ -152,21 +147,19 @@ document.addEventListener('DOMContentLoaded', () => {
             availabilityDisplay.innerHTML = "<p>Veuillez sélectionner une date ci-dessus.</p>";
             return;
         }
-        
-        // On appelle directement la fonction d'affichage
         renderAvailability(selectedDate);
     }
 
 
     /**
-     * Affiche les infos de disponibilité et les RDV pour la date choisie
+     * Affiche les détails pour une date spécifique
      */
     function renderAvailability(selectedDate) {
-        // [BUG FIX] Utilise .startsWith() au lieu de ===
         const availability = allAvailabilities.find(a => a.date.startsWith(selectedDate));
-        
-        // [BUG FIX] Utilise .startsWith() au lieu de ===
         const appointmentsForDay = allAppointments.filter(rdv => rdv.date.startsWith(selectedDate));
+        
+        // Récupération de l'input heure pour mettre les limites
+        const timeInput = document.getElementById('time-input'); 
 
         let html = "";
 
@@ -174,6 +167,10 @@ document.addEventListener('DOMContentLoaded', () => {
             html += `<h3>Détails pour le ${selectedDate}</h3>`;
             html += `<p>✅ Ouvert de <strong>${availability.openTime}</strong> à <strong>${availability.closeTime}</strong></p>`;
             
+            // [NOUVEAU] Contraintes visuelles HTML5 (min/max)
+            timeInput.min = availability.openTime;
+            timeInput.max = availability.closeTime;
+
             if (appointmentsForDay.length > 0) {
                 html += "<h4>Rendez-vous déjà planifiés :</h4><ul>";
                 
@@ -194,8 +191,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
         } else {
+            // Cas où c'est fermé
             html += `<h3>Détails pour le ${selectedDate}</h3>`;
             html += "<p>❌ Le coiffeur n'est pas disponible ce jour-là.</p>";
+            
+            // On nettoie et désactive les limites si fermé
+            timeInput.value = "";
+            timeInput.removeAttribute('min');
+            timeInput.removeAttribute('max');
         }
 
         availabilityDisplay.innerHTML = html;
@@ -203,7 +206,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     /**
-     * Appelé quand l'utilisateur soumet le formulaire
+     * Traitement du formulaire de réservation
      */
     async function handleFormSubmit(event) {
         event.preventDefault(); 
@@ -213,15 +216,34 @@ document.addEventListener('DOMContentLoaded', () => {
             time: timeInput.value,
             duration: parseInt(durationSlider.value, 10),
             client_name: clientName.value,
-            client_email: clientEmail.value, // Corrigé (utilisait clientName par erreur dans une version précédente)
+            client_email: clientEmail.value,
             message: clientMessage.value
         };
 
+        // 1. Vérification basique
         if (!newRdv.date || !newRdv.time) {
             showToast("Veuillez choisir une date et une heure.", "error");
             return;
         }
 
+        // [NOUVEAU] 2. Validation stricte des horaires d'ouverture
+        const availability = allAvailabilities.find(a => a.date.startsWith(newRdv.date));
+
+        if (!availability || !availability.openTime) {
+            showToast("Le salon est fermé à cette date.", "error");
+            return;
+        }
+
+        const closingTime = availability.closeTime;
+        const rdvEnd = addMinutes(newRdv.time, newRdv.duration); // Utilise la fonction utilitaire
+
+        // Vérifie si l'heure est avant l'ouverture OU si la fin est après la fermeture
+        if (newRdv.time < availability.openTime || rdvEnd > closingTime) {
+            showToast(`Impossible : Le salon est ouvert de ${availability.openTime} à ${closingTime}.`, "error");
+            return;
+        }
+
+        // 3. Vérification des conflits avec les autres RDV
         if (checkConflict(newRdv, allAppointments)) {
             showToast("Conflit d'horaire ! L'heure que vous avez choisie est déjà prise.", "error");
             return;
@@ -231,6 +253,7 @@ document.addEventListener('DOMContentLoaded', () => {
         submitButton.textContent = "Envoi en cours...";
 
         try {
+            // [FIX CORS] Envoi en text/plain
             const response = await fetch(GAS_URL, {
                 method: "POST",
                 mode: "cors", 
@@ -259,7 +282,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /**
-     * Vérifie si le nouveau RDV entre en conflit avec des RDV existants
+     * Détecte les chevauchements de RDV
      */
     function checkConflict(newRdv, existingAppointments) {
         const newStart = parseDateTime(newRdv.date, newRdv.time);
@@ -303,15 +326,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const [hours, minutes] = timeStr.split(':');
         return new Date(year, month - 1, day, hours, minutes);
     }
+
+    // [NOUVEAU] Ajoute des minutes à une heure et retourne le format HH:MM
+    function addMinutes(timeStr, minutesToAdd) {
+        const [hours, minutes] = timeStr.split(':').map(Number);
+        const date = new Date();
+        date.setHours(hours, minutes + minutesToAdd);
+        return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    }
     
 }); // Fin du 'DOMContentLoaded'
-
-
-
-
-
-
-
-
-
-
