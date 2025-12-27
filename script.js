@@ -1,8 +1,9 @@
 /*
- * SCRIPT CLIENT - VERSION CORRIGÉE (PADDING DES ZÉROS)
- * CORRECTION CRITIQUE :
- * -> Gère les dates courtes (ex: 5/1/2025) en ajoutant les zéros (2025-01-05).
- * -> C'est ce qui bloquait l'affichage avec les vraies dates Excel/Sheets.
+ * SCRIPT CLIENT - VERSION COMPARATEUR FLEXIBLE
+ * * SOLUTION :
+ * Au lieu de normaliser les données à l'arrivée (ce qui peut échouer),
+ * on utilise une fonction de comparaison intelligente (isSameDate) 
+ * qui teste tous les formats possibles (5/11, 05/11, 2025-11-05) pour chaque ligne.
  */
 
 const GAS_URL = "https://script.google.com/macros/s/AKfycbxuHIOaJrAwoqyxixiONlDa3Xya7E7FwOJWe-MQiI9Z6XNiUWk4_XX10FYTF2bMcKI2vA/exec";
@@ -12,14 +13,14 @@ let allAvailabilities = [];
 
 document.addEventListener('DOMContentLoaded', () => {
     
-    // --- Éléments du DOM ---
+    // --- DOM ---
     const dateSelect = document.getElementById('date-select');
     const timeSelect = document.getElementById('time-select');
     const availabilityDisplay = document.getElementById('availability-display');
     const bookingForm = document.getElementById('booking-form');
     const submitButton = document.getElementById('submit-btn');
     
-    // Champs
+    // Inputs
     const durationSlider = document.getElementById('duration-slider');
     const durationValue = document.getElementById('duration-value');
     const clientName = document.getElementById('client-name');
@@ -34,10 +35,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     dateSelect.addEventListener('change', () => {
-        const selectedDate = dateSelect.value;
-        if (selectedDate) {
-            renderDayDetails(selectedDate);
-            updateTimeSlots(selectedDate);
+        // La value du select est au format ISO (AAAA-MM-JJ)
+        const selectedDateISO = dateSelect.value;
+        if (selectedDateISO) {
+            renderDayDetails(selectedDateISO);
+            updateTimeSlots(selectedDateISO);
         } else {
             availabilityDisplay.innerHTML = "";
             timeSelect.innerHTML = '<option value="">-- Choisissez une date --</option>';
@@ -46,7 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     bookingForm.addEventListener('submit', handleFormSubmit);
 
-    // --- Démarrage ---
+    // --- Init ---
     loadInitialData();
 
 
@@ -58,22 +60,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
 
             if (data.status === "success") {
-                // 1. Normalisation des clés (minuscules)
-                let rawRdv = normalizeKeys(data.rdv);
-                let rawAvail = normalizeKeys(data.disponibilites);
-
-                // 2. Normalisation des DATES (Ajout des zéros manquants)
-                allAppointments = rawRdv.map(item => ({
-                    ...item,
-                    date: normalizeDateValue(item.date)
-                }));
+                // On garde les données BRUTES, on ne touche à rien ici.
+                // On nettoie juste les clés (minuscules) pour être sûr.
+                allAppointments = normalizeKeys(data.rdv);
+                allAvailabilities = normalizeKeys(data.disponibilites);
                 
-                allAvailabilities = rawAvail.map(item => ({
-                    ...item,
-                    date: normalizeDateValue(item.date)
-                }));
-                
-                console.log("Disponibilités reçues (corrigées) :", allAvailabilities); 
+                console.log("Raw Availabilities:", allAvailabilities); // Debug console
                 populateDateSelect();
             } else {
                 throw new Error(data.message);
@@ -86,60 +78,30 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /*
-     * [CORRECTION] Fonction qui force le format AAAA-MM-JJ avec des zéros (05, not 5)
+     * C'EST ICI QUE LA MAGIE OPÈRE
+     * Compare une date ISO (2025-11-05) avec une date du Sheet qui peut être n'importe quoi.
      */
-    function normalizeDateValue(dateStr) {
-        if (!dateStr) return "";
+    function isSameDate(isoDateString, sheetDateValue) {
+        if (!sheetDateValue) return false;
         
-        // Nettoyage des espaces éventuels
-        dateStr = dateStr.trim();
+        // 1. On parse la date cible (ISO) pour avoir les composants
+        const [targetY, targetM, targetD] = isoDateString.split('-').map(String);
+        
+        // On prépare les formats possibles que l'on pourrait trouver dans le Sheet
+        // Format AAAA-MM-JJ (avec zéros)
+        const f1 = `${targetY}-${targetM}-${targetD}`;
+        // Format JJ/MM/AAAA (avec zéros)
+        const f2 = `${targetD}/${targetM}/${targetY}`;
+        // Format J/M/AAAA (SANS zéros - ex: 5/11/2025) -> C'est souvent lui le coupable
+        const f3 = `${parseInt(targetD)}/${parseInt(targetM)}/${targetY}`;
+        // Format AAAA/MM/JJ
+        const f4 = `${targetY}/${targetM}/${targetD}`;
 
-        // Cas 1 : Format déjà ISO (2025-11-05 ou 2025-11-5)
-        if (dateStr.includes('-')) {
-            const parts = dateStr.split('-');
-            if (parts.length === 3) {
-                const y = parts[0];
-                const m = parts[1].padStart(2, '0'); // Ajoute un 0 si besoin
-                const d = parts[2].split('T')[0].padStart(2, '0'); // Gère aussi le "T" du timestamp
-                return `${y}-${m}-${d}`;
-            }
-        }
-        
-        // Cas 2 : Format Français (5/11/2025 ou 05/11/2025)
-        if (dateStr.includes('/')) {
-            const parts = dateStr.split('/');
-            if (parts.length === 3) {
-                const d = parts[0].padStart(2, '0'); // ex: "5" devient "05"
-                const m = parts[1].padStart(2, '0'); // ex: "3" devient "03"
-                const y = parts[2];
-                // On retourne Année-Mois-Jour
-                return `${y}-${m}-${d}`;
-            }
-        }
-        
-        // Cas de secours : on retourne tel quel
-        return dateStr;
-    }
+        // On nettoie la valeur du sheet
+        const val = sheetDateValue.trim();
 
-    function normalizeKeys(list) {
-        if (!list) return [];
-        return list.map(item => {
-            const newItem = {};
-            for (const key in item) {
-                let newKey = key.toLowerCase().trim();
-                // Mapping manuel
-                if (newKey.includes('date')) newKey = 'date';
-                if (newKey.includes('time') || newKey.includes('heure')) newKey = 'time';
-                if (newKey.includes('duration') || newKey.includes('durée')) newKey = 'duration';
-                if (newKey.includes('open')) newKey = 'opentime';
-                if (newKey.includes('close')) newKey = 'closetime';
-                if (newKey.includes('stat')) newKey = 'status';
-                if (newKey.includes('nom') || newKey.includes('client')) newKey = 'client_name';
-                
-                newItem[newKey] = item[key];
-            }
-            return newItem;
-        });
+        // On teste si la valeur du sheet correspond à l'un des formats
+        return val.startsWith(f1) || val === f2 || val === f3 || val === f4;
     }
 
     function populateDateSelect() {
@@ -151,16 +113,17 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let i = 0; i < 60; i++) { 
             const day = new Date(today);
             day.setDate(today.getDate() + i);
-            const dateKey = day.toLocaleDateString('fr-CA'); // Produit toujours "2025-01-05" (avec zéros)
             
+            // Clé de référence unique pour notre logique (ISO)
+            const isoKey = day.toLocaleDateString('fr-CA'); // "2025-11-05"
             const label = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }).format(day);
 
-            // Recherche exacte (maintenant que tout est normalisé avec zéros)
-            const isOpen = allAvailabilities.find(a => a.date === dateKey && a.opentime);
+            // Recherche avec le Comparateur Flexible
+            const isOpen = allAvailabilities.find(a => isSameDate(isoKey, a.date) && a.opentime);
 
             if (isOpen) {
                 const option = document.createElement('option');
-                option.value = dateKey;
+                option.value = isoKey; // On stocke l'ISO comme valeur technique
                 option.textContent = `📅 ${label}`;
                 dateSelect.appendChild(option);
                 count++;
@@ -174,10 +137,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function renderDayDetails(dateKey) {
-        const availability = allAvailabilities.find(a => a.date === dateKey);
-        // Filtre les RDV pour ce jour
-        const dayRdvs = allAppointments.filter(rdv => rdv.date === dateKey);
+    function renderDayDetails(isoKey) {
+        // Utilise isSameDate pour trouver la bonne ligne
+        const availability = allAvailabilities.find(a => isSameDate(isoKey, a.date));
+        
+        // Utilise isSameDate pour trouver les RDV
+        const dayRdvs = allAppointments.filter(rdv => isSameDate(isoKey, rdv.date));
 
         let html = `<div style="background: white; padding: 15px; border-radius: 8px; margin-top: 10px; border: 1px solid #ddd;">`;
         if (availability) {
@@ -214,14 +179,14 @@ document.addEventListener('DOMContentLoaded', () => {
         availabilityDisplay.innerHTML = html;
     }
 
-    function updateTimeSlots(dateKey) {
+    function updateTimeSlots(isoKey) {
         timeSelect.innerHTML = "";
-        const availability = allAvailabilities.find(a => a.date === dateKey);
+        
+        const availability = allAvailabilities.find(a => isSameDate(isoKey, a.date));
         if (!availability) return;
 
-        // On bloque les créneaux des RDV confirmés
         const blockers = allAppointments.filter(rdv => {
-            if (rdv.date !== dateKey) return false;
+            if (!isSameDate(isoKey, rdv.date)) return false;
             const s = (rdv.status || "").toLowerCase();
             return s.includes('confirm') || s.includes('valid');
         });
@@ -242,7 +207,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const rdvStart = timeToMinutes(rdv.time);
                 const rdvEnd = rdvStart + parseInt(rdv.duration || 30);
 
-                // Collision ?
                 if (slotStart < rdvEnd && slotEnd > rdvStart) {
                     isFree = false;
                     break;
@@ -267,7 +231,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function handleFormSubmit(event) {
         event.preventDefault();
-        const selectedDate = dateSelect.value;
+        const selectedDate = dateSelect.value; // C'est l'ISO
         const selectedTime = timeSelect.value;
 
         if (!selectedDate || !selectedTime || selectedTime.includes("Complet") || selectedTime.includes("Choisissez")) {
@@ -275,6 +239,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        // Note : On envoie la date au format ISO (2025-11-05)
+        // Google Sheet la stockera, et si la colonne est formatée en Date, il l'affichera selon tes réglages.
         const newRdv = {
             date: selectedDate,
             time: selectedTime,
@@ -309,6 +275,27 @@ document.addEventListener('DOMContentLoaded', () => {
             submitButton.disabled = false;
             submitButton.textContent = "Envoyer la demande";
         }
+    }
+
+    function normalizeKeys(list) {
+        if (!list) return [];
+        return list.map(item => {
+            const newItem = {};
+            for (const key in item) {
+                let newKey = key.toLowerCase().trim();
+                // Mapping manuel
+                if (newKey.includes('date')) newKey = 'date';
+                if (newKey.includes('time') || newKey.includes('heure')) newKey = 'time';
+                if (newKey.includes('duration') || newKey.includes('durée')) newKey = 'duration';
+                if (newKey.includes('open')) newKey = 'opentime';
+                if (newKey.includes('close')) newKey = 'closetime';
+                if (newKey.includes('stat')) newKey = 'status';
+                if (newKey.includes('nom') || newKey.includes('client')) newKey = 'client_name';
+                
+                newItem[newKey] = item[key];
+            }
+            return newItem;
+        });
     }
 
     function timeToMinutes(timeStr) {
