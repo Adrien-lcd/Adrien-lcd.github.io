@@ -1,9 +1,9 @@
 /*
- * SCRIPT CLIENT - CORRIGÉ (Affichage des RDV Validés)
- * * CORRECTIONS :
- * 1. [CRITIQUE] Remplacement de "===" par ".startsWith()" pour trouver les RDV.
- * 2. [AFFICHAGE] Affiche bien l'heure, la durée et le nom pour les RDV existants.
- * 3. [SELECTION] Retire les créneaux indisponibles de la liste déroulante.
+ * SCRIPT CLIENT - VERSION FINALE (ROBUSTE)
+ * * CORRECTIONS MAJEURES :
+ * 1. [FORMAT DATE] Gère automatiquement les dates "JJ/MM/AAAA" (Sheet) vs "AAAA-MM-JJ" (Site).
+ * 2. [COLONNES] Tolère les majuscules/minuscules dans les en-têtes (Date vs date).
+ * 3. [STATUT] Reconnaît "Confirmed", "Validé", "confirmé" comme valides.
  */
 
 const GAS_URL = "https://script.google.com/macros/s/AKfycbxuHIOaJrAwoqyxixiONlDa3Xya7E7FwOJWe-MQiI9Z6XNiUWk4_XX10FYTF2bMcKI2vA/exec";
@@ -30,15 +30,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Listeners ---
 
-    // 1. Changement de durée -> Recalcul des créneaux horaires
     durationSlider.addEventListener('input', () => {
         durationValue.textContent = durationSlider.value;
-        if (dateSelect.value) {
-            updateTimeSlots(dateSelect.value);
-        }
+        if (dateSelect.value) updateTimeSlots(dateSelect.value);
     });
 
-    // 2. Changement de date -> Affiche les infos et recalcule les heures
     dateSelect.addEventListener('change', () => {
         const selectedDate = dateSelect.value;
         if (selectedDate) {
@@ -50,7 +46,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // 3. Soumission
     bookingForm.addEventListener('submit', handleFormSubmit);
 
     // --- Démarrage ---
@@ -65,44 +60,97 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
 
             if (data.status === "success") {
-                allAppointments = data.rdv;
-                allAvailabilities = data.disponibilites;
+                // 1. On uniformise les noms de colonnes (minuscules)
+                let rawRdv = normalizeKeys(data.rdv);
+                let rawAvail = normalizeKeys(data.disponibilites);
+
+                // 2. On uniformise les VALEURS de dates (JJ/MM/AAAA -> AAAA-MM-JJ)
+                allAppointments = rawRdv.map(item => ({
+                    ...item,
+                    date: normalizeDateValue(item.date)
+                }));
                 
-                // On remplit le menu déroulant des DATES
+                allAvailabilities = rawAvail.map(item => ({
+                    ...item,
+                    date: normalizeDateValue(item.date)
+                }));
+                
+                console.log("Données RDV chargées :", allAppointments);
+                console.log("Données Dispo chargées :", allAvailabilities);
+
                 populateDateSelect();
             } else {
                 throw new Error(data.message);
             }
         } catch (error) {
             console.error(error);
-            showToast("Erreur de chargement: " + error.message, "error");
+            showToast("Erreur chargement: " + error.message, "error");
             dateSelect.innerHTML = '<option>Erreur de connexion</option>';
         }
     }
 
-    /**
-     * Remplit la liste déroulante uniquement avec les jours ouverts
+    /*
+     * Convertit une date "JJ/MM/AAAA" (Excel/Sheet FR) en "AAAA-MM-JJ" (JS Standard)
+     * Si la date est déjà "AAAA-MM-JJ", on la garde telle quelle.
      */
+    function normalizeDateValue(dateStr) {
+        if (!dateStr) return "";
+        
+        // Si c'est déjà au format AAAA-MM-JJ (ex: 2025-11-03)
+        if (dateStr.match(/^\d{4}-\d{2}-\d{2}/)) {
+            return dateStr.substring(0, 10);
+        }
+        
+        // Si c'est au format JJ/MM/AAAA (ex: 03/11/2025)
+        if (dateStr.includes('/')) {
+            const parts = dateStr.split('/');
+            if (parts.length === 3) {
+                // On inverse : Jour/Mois/Année -> Année-Mois-Jour
+                return `${parts[2]}-${parts[1]}-${parts[0]}`;
+            }
+        }
+        return dateStr;
+    }
+
+    /*
+     * Met toutes les clés (colonnes) en minuscules pour éviter les erreurs "Date" vs "date"
+     */
+    function normalizeKeys(list) {
+        if (!list) return [];
+        return list.map(item => {
+            const newItem = {};
+            for (const key in item) {
+                let newKey = key.toLowerCase().trim();
+                // Mapping de sécurité
+                if (newKey.includes('date')) newKey = 'date';
+                if (newKey.includes('time') || newKey.includes('heure')) newKey = 'time';
+                if (newKey.includes('duration') || newKey.includes('durée')) newKey = 'duration';
+                if (newKey.includes('open')) newKey = 'opentime';
+                if (newKey.includes('close')) newKey = 'closetime';
+                if (newKey.includes('stat')) newKey = 'status';
+                if (newKey.includes('nom') || newKey.includes('client')) newKey = 'client_name';
+                
+                newItem[newKey] = item[key];
+            }
+            return newItem;
+        });
+    }
+
     function populateDateSelect() {
         dateSelect.innerHTML = '<option value="">-- Sélectionner une date --</option>';
-        
         const today = new Date();
         today.setHours(0,0,0,0);
         let count = 0;
 
-        // On cherche les 30 prochains jours
-        for (let i = 0; i < 30; i++) {
+        for (let i = 0; i < 60; i++) { // On regarde sur 60 jours
             const day = new Date(today);
             day.setDate(today.getDate() + i);
+            const dateKey = day.toLocaleDateString('fr-CA'); // AAAA-MM-JJ
             
-            // Format technique (YYYY-MM-DD)
-            const dateKey = day.toLocaleDateString('fr-CA'); 
-            
-            // Format joli pour l'utilisateur
             const label = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }).format(day);
 
-            // Est-ce ouvert ce jour-là ? Utilise startsWith pour être sûr
-            const isOpen = allAvailabilities.find(a => a.date.startsWith(dateKey) && a.openTime);
+            // Recherche exacte maintenant que tout est normalisé
+            const isOpen = allAvailabilities.find(a => a.date === dateKey && a.opentime);
 
             if (isOpen) {
                 const option = document.createElement('option');
@@ -120,89 +168,81 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    /**
-     * Affiche les RDV déjà pris (BUG FIX: Utilise startsWith)
-     */
     function renderDayDetails(dateKey) {
-        // Trouve les horaires d'ouverture
-        const availability = allAvailabilities.find(a => a.date.startsWith(dateKey));
+        const availability = allAvailabilities.find(a => a.date === dateKey);
         
-        // Trouve TOUS les RDV de ce jour (confirmés ou pending)
-        // [CORRECTION IMPORTANTE] Utilisation de startsWith
-        const dayRdvs = allAppointments.filter(rdv => rdv.date && rdv.date.startsWith(dateKey));
+        // Filtre les RDV pour ce jour
+        const dayRdvs = allAppointments.filter(rdv => rdv.date === dateKey);
 
         let html = `<div style="background: white; padding: 15px; border-radius: 8px; margin-top: 10px; border: 1px solid #ddd;">`;
-        html += `<p><strong>Horaires d'ouverture :</strong> ${availability.openTime} - ${availability.closeTime}</p>`;
+        if (availability) {
+            html += `<p><strong>Horaires d'ouverture :</strong> ${availability.opentime} - ${availability.closetime}</p>`;
+        }
 
         if (dayRdvs.length > 0) {
-            html += `<h5>⚠️ Créneaux déjà réservés :</h5><ul style="padding-left: 20px;">`;
-            
-            // Tri par heure
-            dayRdvs.sort((a, b) => a.time.localeCompare(b.time));
+            html += `<h5>⚠️ Rendez-vous déjà pris :</h5><ul style="padding-left: 20px;">`;
+            dayRdvs.sort((a, b) => (a.time || "").localeCompare(b.time || ""));
 
             dayRdvs.forEach(rdv => {
-                // Calcul heure fin
+                if (!rdv.time) return;
+
                 const [h, m] = rdv.time.split(':').map(Number);
-                const endDate = new Date(0,0,0, h, m + parseInt(rdv.duration));
+                const endDate = new Date(0,0,0, h, m + parseInt(rdv.duration || 30));
                 const endStr = endDate.toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'});
 
-                // Icône selon statut
-                const icon = rdv.status === 'confirmed' ? '❌' : '⏳';
-                const statusText = rdv.status === 'confirmed' ? 'Confirmé' : 'En attente';
+                // Gestion souple du statut
+                const status = (rdv.status || "").toLowerCase();
+                // On considère occupé si c'est confirmé OU validé
+                const isConfirmed = status.includes('confirm') || status.includes('valid');
                 
-                // Affichage: Heure, Durée, Nom
+                const icon = isConfirmed ? '❌ Occupé' : '⏳ En attente';
+                const nomClient = rdv.client_name || "Client";
+
                 html += `<li>
-                    <strong>${rdv.time} - ${endStr}</strong> (${rdv.duration} min) : ${icon} 
-                    <br><span style="font-size: 0.9em; color: #555;">Client : ${rdv.client_name}</span>
+                    <strong>${rdv.time} - ${endStr}</strong> : ${icon} 
+                    <br><span style="font-size: 0.9em; color: #666;">${nomClient} (${rdv.duration} min)</span>
                 </li>`;
             });
             html += `</ul>`;
         } else {
-            html += `<p><em>Aucun rendez-vous pour le moment. La journée est libre.</em></p>`;
+            html += `<p><em>Aucun rendez-vous pour le moment.</em></p>`;
         }
         html += `</div>`;
-        
         availabilityDisplay.innerHTML = html;
     }
 
-
-    /**
-     * Calcule les créneaux disponibles en excluant les conflits
-     */
     function updateTimeSlots(dateKey) {
         timeSelect.innerHTML = "";
-        
-        const availability = allAvailabilities.find(a => a.date.startsWith(dateKey));
+        const availability = allAvailabilities.find(a => a.date === dateKey);
         if (!availability) return;
 
-        // Récupération des RDV confirmés qui bloquent (avec startsWith)
-        const blockers = allAppointments.filter(
-            rdv => rdv.date && rdv.date.startsWith(dateKey) && rdv.status === 'confirmed'
-        );
+        // On bloque les créneaux des RDV confirmés
+        const blockers = allAppointments.filter(rdv => {
+            if (rdv.date !== dateKey) return false;
+            const s = (rdv.status || "").toLowerCase();
+            return s.includes('confirm') || s.includes('valid');
+        });
 
-        const openMinutes = timeToMinutes(availability.openTime);
-        const closeMinutes = timeToMinutes(availability.closeTime);
+        const openMinutes = timeToMinutes(availability.opentime);
+        const closeMinutes = timeToMinutes(availability.closetime);
         const duration = parseInt(durationSlider.value);
 
         let count = 0;
 
-        // Boucle : on teste chaque quart d'heure
         for (let time = openMinutes; time + duration <= closeMinutes; time += 15) {
-            
             const slotStart = time;
             const slotEnd = time + duration;
             let isFree = true;
 
-            // Vérification de collision avec les RDV existants
             for (let rdv of blockers) {
+                if (!rdv.time) continue;
                 const rdvStart = timeToMinutes(rdv.time);
-                const rdvEnd = rdvStart + parseInt(rdv.duration);
+                const rdvEnd = rdvStart + parseInt(rdv.duration || 30);
 
-                // Formule mathématique de collision d'intervalles :
-                // (Start1 < End2) && (End1 > Start2)
+                // Collision ?
                 if (slotStart < rdvEnd && slotEnd > rdvStart) {
                     isFree = false;
-                    break; // Conflit trouvé
+                    break;
                 }
             }
 
@@ -222,16 +262,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-
-    // --- Soumission ---
     async function handleFormSubmit(event) {
         event.preventDefault();
-
         const selectedDate = dateSelect.value;
         const selectedTime = timeSelect.value;
 
         if (!selectedDate || !selectedTime || selectedTime.includes("Complet") || selectedTime.includes("Choisissez")) {
-            showToast("Veuillez sélectionner une date et un créneau valide.", "error");
+            showToast("Date ou heure invalide.", "error");
             return;
         }
 
@@ -245,7 +282,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         submitButton.disabled = true;
-        submitButton.textContent = "Envoi en cours...";
+        submitButton.textContent = "Envoi...";
 
         try {
             const response = await fetch(GAS_URL, {
@@ -254,17 +291,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: { "Content-Type": "text/plain;charset=utf-8" },
                 body: JSON.stringify(newRdv),
             });
-            
             const result = await response.json();
 
             if (result.status === "success") {
-                showToast("RDV envoyé ! En attente de validation.", "success");
+                showToast("RDV envoyé ! Attente validation.", "success");
                 bookingForm.reset();
-                setTimeout(() => loadInitialData(), 1000);
+                setTimeout(() => loadInitialData(), 1500);
             } else {
                 throw new Error(result.message);
             }
-
         } catch (error) {
             showToast("Erreur: " + error.message, "error");
         } finally {
@@ -273,9 +308,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Utilitaires ---
-
     function timeToMinutes(timeStr) {
+        if(!timeStr) return 0;
         const [h, m] = timeStr.split(':').map(Number);
         return h * 60 + m;
     }
@@ -293,8 +327,7 @@ document.addEventListener('DOMContentLoaded', () => {
         toastContainer.appendChild(t);
         setTimeout(() => t.classList.add('show'), 100);
         setTimeout(() => {
-            t.classList.remove('show'); 
-            t.remove();
+            t.classList.remove('show'); t.remove();
         }, 3000);
     }
 });
