@@ -234,7 +234,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch(GAS_URL, {
                 method: "POST",
                 mode: "cors", 
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "text/plain;charset=utf-8" },
                 body: JSON.stringify(newRdv),
             });
             const result = await response.json();
@@ -305,6 +305,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
 }); // Fin du 'DOMContentLoaded'
+
 
 
 
